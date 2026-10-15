@@ -1,0 +1,9 @@
+{
+  "nome": "episodio-01",
+  "idioma": "pt-br",
+  "perfil": "joao",
+  "exaggeration": 0.5,
+  "cfg_weight": 0.5,
+  "formato": "ambos",
+  "legenda_srt": true
+}

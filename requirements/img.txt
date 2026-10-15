@@ -1,0 +1,11 @@
+# Ambiente da API + worker de imagens (Z-Image Turbo)
+torch
+diffusers>=0.36.0
+transformers>=4.56
+accelerate
+safetensors
+pillow
+numpy
+fastapi
+uvicorn[standard]
+python-multipart

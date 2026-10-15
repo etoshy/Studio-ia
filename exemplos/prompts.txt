@@ -1,0 +1,4 @@
+# 1 prompt por linha. Linhas com # são ignoradas.
+an old lighthouse on a cliff at sunset, waves crashing, photorealistic documentary photo, 35mm, golden hour
+a dusty library full of ancient books, soft window light, cinematic, highly detailed
+YouTube thumbnail, bold yellow text "VOCÊ SABIA?" over a dark mysterious forest background

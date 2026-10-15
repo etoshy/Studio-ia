@@ -1,0 +1,8 @@
+# Só para testar no seu PC em modo simulado (MOCK=1), sem GPU e sem baixar modelos
+fastapi
+uvicorn
+python-multipart
+pillow
+numpy
+soundfile
+requests

@@ -1,0 +1,5 @@
+Em 1872, um navio foi encontrado à deriva no meio do Atlântico. Não havia ninguém a bordo.
+
+{{emocao=0.8, cfg=0.3}} A mesa ainda estava posta. O café, ainda morno.
+{{silencio=900}}
+{{emocao=0.5, cfg=0.5}} Neste vídeo, a gente vai entender o que realmente aconteceu.
