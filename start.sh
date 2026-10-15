@@ -28,8 +28,11 @@ if [ "${ENABLE_IMG:-1}" = "1" ]; then
   echo "worker de imagens  pid $!  (log: $LOGS/imagens.log)"
 fi
 if [ "${ENABLE_TTS:-1}" = "1" ]; then
-  nohup "$VENVS/tts/bin/python" "$ROOT/workers/worker_tts.py" >> "$LOGS/voz.log" 2>&1 &
-  echo "worker de voz      pid $!  (log: $LOGS/voz.log)"
+  # TTS_WORKERS=2 -> duas narrações ao mesmo tempo na mesma placa (precisa de ~8 GB de VRAM a mais)
+  for n in $(seq 1 "${TTS_WORKERS:-1}"); do
+    WORKER_ID=$n nohup "$VENVS/tts/bin/python" "$ROOT/workers/worker_tts.py" >> "$LOGS/voz-$n.log" 2>&1 &
+    echo "worker de voz $n    pid $!  (log: $LOGS/voz-$n.log)"
+  done
 fi
 cd "$ROOT"
 nohup "$VENVS/img/bin/python" -m uvicorn app.main:app --host 0.0.0.0 --port "$PORT" >> "$LOGS/api.log" 2>&1 &

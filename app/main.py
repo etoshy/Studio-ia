@@ -333,6 +333,7 @@ def gerar_voz_texto(
     pausa_paragrafo_ms: int = Form(350),
     normalizar: bool = Form(False),
     legenda_srt: bool = Form(False),
+    transcrever: bool = Form(False, description="transcreve com o Whisper depois de narrar (tempo de cada palavra)"),
     nome: Optional[str] = Form(None),
 ):
     if not texto.strip():
@@ -350,7 +351,7 @@ def gerar_voz_texto(
     config = {"modelo": modelo, "idioma": idioma, "exaggeration": exaggeration, "cfg_weight": cfg_weight,
               "temperature": temperature, "marcacoes": marcacoes, "pausa_ms": pausa_ms,
               "pausa_paragrafo_ms": pausa_paragrafo_ms, "normalizar": normalizar, "legenda_srt": legenda_srt,
-              "nome": nome or "narracao", "formato": "wav"}
+              "nome": nome or "narracao", "formato": "wav", "transcrever": transcrever}
     st = store.new_job("voz", {}, nome=nome or "narracao")
     d = store.job_dir(st["id"])
     (d / "input" / "roteiro.txt").write_text(texto, encoding="utf-8")

@@ -59,7 +59,42 @@ PADRAO = {
     "legenda_srt": True,
     "salvar_trechos": False,
     "marcacoes": True,         # interpreta {{emocao=0.8}} etc. no roteiro
+    "transcrever": False,      # depois de narrar, transcreve com o Whisper (tempo de cada palavra) -> <nome>.transcricao.json
 }
+
+WHISPER_MODELO = os.getenv("WHISPER_MODELO", "turbo")
+_whisper = None
+
+
+def transcrever(caminho: Path, idioma: str, legendas: list) -> list:
+    """Mesmo formato do whisper_transcribe.py do site: [{start, end, text, words: [{word, start, end}]}]."""
+    global _whisper
+    if MOCK:  # palavras espalhadas dentro de cada trecho narrado
+        segs = []
+        for a, b, t in legendas:
+            ws = t.split()
+            passo = (b - a) / max(1, len(ws))
+            segs.append({"start": round(a, 3), "end": round(b, 3), "text": t,
+                         "words": [{"word": w, "start": round(a + i * passo, 3), "end": round(a + (i + 1) * passo, 3)}
+                                   for i, w in enumerate(ws)]})
+        return segs
+    if _whisper is None:
+        import whisper
+
+        store.heartbeat(TIPO, "carregando_modelo", modelo=f"whisper-{WHISPER_MODELO}")
+        log(f"carregando whisper {WHISPER_MODELO} ...")
+        _whisper = whisper.load_model(WHISPER_MODELO, device=DEVICE)
+    res = _whisper.transcribe(str(caminho), language=(idioma or "pt").split("-")[0], word_timestamps=True,
+                              verbose=False)
+    segs = []
+    for sg in res.get("segments", []):
+        texto = str(sg.get("text") or "").strip()
+        if not texto:
+            continue
+        segs.append({"start": float(sg["start"]), "end": float(sg["end"]), "text": texto,
+                     "words": [{"word": w["word"].strip(), "start": float(w["start"]), "end": float(w["end"])}
+                               for w in sg.get("words", []) if str(w.get("word", "")).strip()]})
+    return segs
 
 modelos: "OrderedDict[str, object]" = OrderedDict()
 conds_padrao: dict = {}
@@ -358,6 +393,19 @@ def processar(st: dict) -> None:
             if pico > 0:
                 final = final * (0.89 / pico)  # pico em -1 dBFS
         arquivos += salvar_audio(final, saida / nome_base, cfg["formato"])
+        if cfg.get("transcrever"):
+            store.update_status(jid, mensagem="transcrevendo (Whisper)")
+            store.heartbeat(TIPO, "ocupado", job=jid, etapa="transcrevendo")
+            audio_feito = saida / f"{nome_base}.wav"
+            if not audio_feito.exists():
+                audio_feito = saida / f"{nome_base}.mp3"
+            try:
+                segs = transcrever(audio_feito, idioma, legendas)
+                store.write_json(saida / f"{nome_base}.transcricao.json", segs)
+                arquivos.append(f"{nome_base}.transcricao.json")
+            except Exception as e:
+                traceback.print_exc()
+                erros.append({"roteiro": r.name, "trecho": "(transcrição)", "erro": f"Whisper: {str(e)[:300]}"})
         if cfg.get("legenda_srt") and legendas:
             srt = "\n".join(f"{i}\n{tempo_srt(a)} --> {tempo_srt(b)}\n{t}\n"
                             for i, (a, b, t) in enumerate(legendas, 1))

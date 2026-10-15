@@ -1,0 +1,3 @@
+# scripts do pod precisam de fim de linha Linux (LF), mesmo editando no Windows
+*.sh text eol=lf
+*.py text eol=lf

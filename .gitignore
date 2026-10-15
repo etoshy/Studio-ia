@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+dados/
+studio_data/
+resultados/
+*.zip
+.env

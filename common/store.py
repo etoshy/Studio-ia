@@ -142,8 +142,39 @@ def cancel_requested(job_id: str) -> bool:
     return (job_dir(job_id) / "cancelar").exists()
 
 
+class _Trava:
+    """Trava entre processos (vários workers do mesmo tipo pegando jobs da mesma fila)."""
+
+    def __init__(self, nome: str):
+        ensure_dirs()
+        self.f = open(WORKERS_DIR / f".{nome}.lock", "w")
+
+    def __enter__(self):
+        try:
+            import fcntl
+
+            fcntl.flock(self.f, fcntl.LOCK_EX)
+        except ImportError:  # Windows (modo de teste): sem trava
+            pass
+        return self
+
+    def __exit__(self, *a):
+        try:
+            import fcntl
+
+            fcntl.flock(self.f, fcntl.LOCK_UN)
+        except ImportError:
+            pass
+        self.f.close()
+
+
 def claim_next(tipo: str) -> dict | None:
-    """Pega o job mais antigo na fila desse tipo e marca como em andamento (1 worker por tipo)."""
+    """Pega o job mais antigo na fila desse tipo e marca como em andamento (seguro com vários workers)."""
+    with _Trava(f"fila_{tipo}"):
+        return _claim_next(tipo)
+
+
+def _claim_next(tipo: str) -> dict | None:
     for st in list_jobs(tipo):
         raw = read_json(job_dir(st["id"]) / "status.json") or {}
         if raw.get("status") != NA_FILA:
@@ -151,26 +182,31 @@ def claim_next(tipo: str) -> dict | None:
         if cancel_requested(st["id"]):
             update_status(st["id"], status=CANCELADO, concluido=agora(), mensagem="cancelado antes de iniciar")
             continue
-        return update_status(st["id"], status=EM_ANDAMENTO, iniciado=agora(), mensagem="iniciando")
+        return update_status(st["id"], status=EM_ANDAMENTO, iniciado=agora(), mensagem="iniciando", worker=WORKER_ID)
     return None
 
 
+WORKER_ID = os.getenv("WORKER_ID", "1")
+
+
 def requeue_stale(tipo: str) -> None:
-    """Se o worker reiniciou no meio de um job, devolve o job para a fila."""
+    """Se o worker reiniciou no meio de um job, devolve pra fila os jobs que ERAM DELE."""
     for st in list_jobs(tipo):
         raw = read_json(job_dir(st["id"]) / "status.json") or {}
-        if raw.get("status") == EM_ANDAMENTO:
+        if raw.get("status") == EM_ANDAMENTO and str(raw.get("worker") or "1") == WORKER_ID:
             update_status(st["id"], status=NA_FILA, mensagem="reenfileirado após reinício do worker")
 
 
 def heartbeat(tipo: str, estado: str, **extra) -> None:
     ensure_dirs()
-    write_json(WORKERS_DIR / f"{tipo}.json", {"estado": estado, "ts": time.time(), "pid": os.getpid(), **extra})
+    nome = tipo if WORKER_ID == "1" else f"{tipo}-{WORKER_ID}"
+    write_json(WORKERS_DIR / f"{nome}.json", {"estado": estado, "ts": time.time(), "pid": os.getpid(), **extra})
 
 
 def workers_info() -> dict:
     info = {}
-    for tipo in ("imagem", "voz"):
+    extras = sorted(p.stem for p in WORKERS_DIR.glob("*-*.json")) if WORKERS_DIR.exists() else []
+    for tipo in ["imagem", "voz"] + extras:
         hb = read_json(WORKERS_DIR / f"{tipo}.json")
         if not hb:
             info[tipo] = {"estado": "nao_iniciado"}

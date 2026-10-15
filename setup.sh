@@ -34,27 +34,25 @@ if [ -z "$PY_TTS" ]; then
   if command -v python3.11 >/dev/null 2>&1; then PY_TTS=python3.11; else PY_TTS=python3; fi
 fi
 
+# Cria cada ambiente uma vez; o "pip install" roda sempre (rápido quando já está tudo lá) pra pegar
+# dependências novas depois de um "git pull".
 if [ ! -f "$VENVS/img/.ok" ]; then
-  echo "==> ambiente de imagens + API ($($PY_IMG --version))"
+  echo "==> criando o ambiente de imagens + API ($($PY_IMG --version))"
   rm -rf "$VENVS/img"
   criar_venv "$VENVS/img" "$PY_IMG"
   "$VENVS/img/bin/pip" install -q -U pip wheel
-  "$VENVS/img/bin/pip" install -q -r "$ROOT/requirements/img.txt"
-  touch "$VENVS/img/.ok"
-else
-  echo "==> ambiente de imagens já instalado"
 fi
+echo "==> dependências de imagens + API"
+"$VENVS/img/bin/pip" install -q -r "$ROOT/requirements/img.txt" && touch "$VENVS/img/.ok"
 
 if [ ! -f "$VENVS/tts/.ok" ]; then
-  echo "==> ambiente de voz ($($PY_TTS --version))"
+  echo "==> criando o ambiente de voz ($($PY_TTS --version))"
   rm -rf "$VENVS/tts"
   criar_venv "$VENVS/tts" "$PY_TTS"
   "$VENVS/tts/bin/pip" install -q -U pip wheel
-  "$VENVS/tts/bin/pip" install -q -r "$ROOT/requirements/tts.txt"
-  touch "$VENVS/tts/.ok"
-else
-  echo "==> ambiente de voz já instalado"
 fi
+echo "==> dependências de voz (Chatterbox + Whisper)"
+"$VENVS/tts/bin/pip" install -q -r "$ROOT/requirements/tts.txt" && touch "$VENVS/tts/.ok"
 
 if command -v nvidia-smi >/dev/null 2>&1; then
   GPU="$(nvidia-smi --query-gpu=name --format=csv,noheader | head -1)"

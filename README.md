@@ -10,6 +10,8 @@ você manda os pedidos, acompanha e baixa os resultados.
   - **Multilingual V3**, com 23 idiomas.
 - 📦 **Perfis de voz** no mesmo .zip do 📦 Exportar/Importar do BestEditor.
 - 🔗 O **BestEditor** (v84_121+) usa este pod direto: ⚙️ Configurações → 🟣 Runpod → 🖥️ Meu pod.
+- 🏭 A aba **Produção no pod** do BestEditor (v84_122+) manda vários roteiros de uma vez: o pod narra, **transcreve com o
+  Whisper** (tempo de cada palavra) e gera as imagens das cenas difíceis.
 
 ```
 app/main.py               API (FastAPI) — não carrega modelo nenhum
@@ -45,8 +47,10 @@ bash studio-ia/setup.sh        # ~10-15 min na primeira vez
 ## 3. Cada sessão
 
 ```bash
-bash /workspace/studio-ia/start.sh
+cd /workspace/studio-ia && git pull && bash setup.sh && bash start.sh
 ```
+
+O `setup.sh` é rápido quando já está tudo instalado (só confere), e instala o que for novo depois de um `git pull`.
 
 Ele mostra a URL: `https://<id-do-pod>-8000.proxy.runpod.net`.
 
@@ -62,6 +66,8 @@ Opções do `start.sh`:
 | `ENABLE_TTS=0` | só imagens |
 | `API_KEY=segredo` | passa a exigir a chave (header `X-API-Key`) |
 | `TTS_PRELOAD="pacote:pt-br,turbo"` | modelos de voz que já carregam ao ligar |
+| `TTS_WORKERS=2` | duas narrações ao mesmo tempo na mesma placa (~1,5× mais rápido; precisa de ~8 GB de VRAM a mais — bom na L40S) |
+| `WHISPER_MODELO=turbo` | modelo do Whisper da transcrição (`turbo` é rápido e bom; `large-v3` mais lento) |
 
 No fim, baixe os resultados e **desligue o pod**. Use *Stop* para manter o volume; o que estiver no volume fica.
 
@@ -185,7 +191,9 @@ Exemplos prontos em `exemplos/`.
 - a voz: `perfil` **ou** o arquivo `referencia`;
 - `exaggeration`, `cfg_weight`, `temperature`;
 - `pacote_dedicado`;
-- `marcacoes` (desligadas por padrão).
+- `marcacoes` (desligadas por padrão);
+- `transcrever`: depois de narrar, transcreve com o Whisper e entrega `<nome>.transcricao.json` (mesmo formato do
+  `whisper_transcribe.py` do site: trechos com o tempo de cada palavra).
 
 ### Perfis de voz
 
