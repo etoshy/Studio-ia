@@ -197,13 +197,41 @@ def carregar(chave: str):
         from chatterbox.mtl_tts import ChatterboxMultilingualTTS
 
         pasta, t3 = _montar_pasta_pacote(chave.split(":", 1)[1])
-        m = ChatterboxMultilingualTTS.from_local(pasta, DEVICE, t3_model=t3)
+        m = _from_local_tolerante(ChatterboxMultilingualTTS, pasta, t3)
     else:
         raise ValueError(f"engine desconhecida: {chave}")
     modelos[chave] = m
     conds_padrao[chave] = copy.copy(m.conds) if getattr(m, "conds", None) is not None else None
     log(f"{chave} pronto em {time.time() - t:.0f}s")
     return m
+
+
+def _from_local_tolerante(cls, pasta, t3):
+    """Pacotes de voz (ex.: pt-BR) salvos sem os buffers fixos do tokenizer (`tokenizer._mel_filters`,
+    `tokenizer.window`) quebravam no load_state_dict estrito. Esses buffers são calculados na criação do modelo
+    (não são aprendidos), então pode carregar sem eles — qualquer OUTRA chave faltando continua dando erro."""
+    try:
+        return cls.from_local(pasta, DEVICE, t3_model=t3)
+    except RuntimeError as e:
+        if "_mel_filters" not in str(e) and "tokenizer.window" not in str(e):
+            raise
+    import torch.nn as nn
+
+    original = nn.Module.load_state_dict
+
+    def tolerante(self, state_dict, strict=True, assign=False):
+        r = original(self, state_dict, strict=False, assign=assign)
+        ruins = [k for k in r.missing_keys if not (k.endswith("_mel_filters") or k.endswith(".window") or k == "window")]
+        if strict and (ruins or r.unexpected_keys):
+            raise RuntimeError(f"chaves faltando: {ruins[:10]} · sobrando: {list(r.unexpected_keys)[:10]}")
+        return r
+
+    nn.Module.load_state_dict = tolerante
+    try:
+        log("pacote sem os buffers do tokenizer — carregando com eles recalculados")
+        return cls.from_local(pasta, DEVICE, t3_model=t3)
+    finally:
+        nn.Module.load_state_dict = original
 
 
 # ------------------------------------------------------------ áudio
