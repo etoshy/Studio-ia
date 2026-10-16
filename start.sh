@@ -10,6 +10,7 @@ WS="${WORKSPACE:-/workspace}"
 VENVS="$WS/venvs"
 export HF_HOME="${HF_HOME:-$WS/hf}"
 export DATA_DIR="${DATA_DIR:-$WS/studio_data}"
+export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"  # menos memória "picada" na GPU
 LOGS="${LOGS:-$WS/studio_logs}"
 PORT="${PORT:-8000}"
 mkdir -p "$LOGS" "$DATA_DIR" "$HF_HOME"

@@ -27,6 +27,49 @@ def log(msg: str) -> None:
     print(f"[{store.agora()}] [imagem] {msg}", flush=True)
 
 
+# Os dois modelos NÃO cabem juntos na placa ao lado da voz (Z-Image ~21 GB + klein ~17 GB + Chatterbox ~9 GB > 48 GB):
+# só UM fica na GPU; o outro espera na memória RAM e troca de lugar quando o job precisa dele (alguns segundos).
+# Placa pequena (< 30 GB): os dois usam o offload do diffusers (mais lento, mas cabe).
+_ONDE = {"z": None, "k": None}  # "gpu" | "cpu" | "offload"
+
+
+def _offload_auto() -> bool:
+    import torch
+    return OFFLOAD == "1" or (OFFLOAD == "auto" and torch.cuda.get_device_properties(0).total_memory / 1e9 < 30)
+
+
+def _preparar(p, chave: str) -> None:
+    try:
+        p.vae.enable_tiling()  # decodificar a imagem em pedaços: bem menos memória no fim de cada imagem
+    except Exception:  # noqa: BLE001
+        pass
+    if _offload_auto():
+        p.enable_model_cpu_offload()
+        _ONDE[chave] = "offload"
+    else:
+        _ONDE[chave] = "cpu"
+
+
+def usar(chave: str) -> None:
+    """Põe o modelo `chave` ("z" Z-Image | "k" klein) na GPU e manda o outro pra RAM."""
+    if MOCK or _ONDE.get(chave) in ("gpu", "offload"):
+        return
+    import torch
+    outro = "k" if chave == "z" else "z"
+    p_outro = pipe_klein if outro == "k" else pipe
+    if _ONDE.get(outro) == "gpu" and p_outro is not None:
+        t = time.time()
+        p_outro.to("cpu")
+        _ONDE[outro] = "cpu"
+        torch.cuda.empty_cache()
+        log(f"{'klein' if outro == 'k' else 'Z-Image'} → RAM ({time.time() - t:.0f}s)")
+    p_esse = pipe_klein if chave == "k" else pipe
+    t = time.time()
+    p_esse.to("cuda")
+    _ONDE[chave] = "gpu"
+    log(f"{'klein' if chave == 'k' else 'Z-Image'} → GPU ({time.time() - t:.0f}s, livre {torch.cuda.mem_get_info()[0] / 1e9:.0f} GB)")
+
+
 def carregar() -> None:
     global pipe
     if pipe is not None or MOCK:
@@ -37,15 +80,9 @@ def carregar() -> None:
     import torch
     from diffusers import ZImagePipeline
 
-    p = ZImagePipeline.from_pretrained(MODEL_ID, torch_dtype=torch.bfloat16)
-    vram = torch.cuda.get_device_properties(0).total_memory / 1e9
-    usar_offload = OFFLOAD == "1" or (OFFLOAD == "auto" and vram < 30)
-    if usar_offload:
-        p.enable_model_cpu_offload()
-    else:
-        p.to("cuda")
-    pipe = p
-    log(f"modelo pronto em {time.time() - t:.0f}s (VRAM {vram:.0f} GB, offload={'sim' if usar_offload else 'não'})")
+    pipe = ZImagePipeline.from_pretrained(MODEL_ID, torch_dtype=torch.bfloat16)
+    _preparar(pipe, "z")
+    log(f"Z-Image carregado em {time.time() - t:.0f}s ({_ONDE['z']})")
 
 
 def carregar_klein() -> None:
@@ -58,16 +95,9 @@ def carregar_klein() -> None:
     import torch
     from diffusers import Flux2KleinPipeline
 
-    p = Flux2KleinPipeline.from_pretrained(KLEIN_ID, torch_dtype=torch.bfloat16)
-    vram = torch.cuda.get_device_properties(0).total_memory / 1e9
-    livre = torch.cuda.mem_get_info()[0] / 1e9
-    usar_offload = OFFLOAD == "1" or (OFFLOAD == "auto" and livre < 16)
-    if usar_offload:
-        p.enable_model_cpu_offload()
-    else:
-        p.to("cuda")
-    pipe_klein = p
-    log(f"klein pronto em {time.time() - t:.0f}s (VRAM {vram:.0f} GB, livre {livre:.0f} GB, offload={'sim' if usar_offload else 'não'})")
+    pipe_klein = Flux2KleinPipeline.from_pretrained(KLEIN_ID, torch_dtype=torch.bfloat16)
+    _preparar(pipe_klein, "k")
+    log(f"klein carregado em {time.time() - t:.0f}s ({_ONDE['k']})")
 
 
 def _refs(item: dict, pasta_refs: Path):
@@ -95,6 +125,7 @@ def gerar(item: dict, pasta_refs: Path | None = None):
         import torch
 
         carregar_klein()
+        usar("k")
         gen = torch.Generator("cuda").manual_seed(int(item["seed"]))
         return pipe_klein(
             image=refs or None,
@@ -115,6 +146,8 @@ def gerar(item: dict, pasta_refs: Path | None = None):
         return img
     import torch
 
+    carregar()
+    usar("z")
     gen = torch.Generator("cuda").manual_seed(int(item["seed"]))
     return pipe(
         prompt=item["prompt"],
@@ -143,10 +176,8 @@ def processar(st: dict) -> None:
     formato = params.get("formato", "png")
     total = len(itens)
     store.update_status(jid, progresso={"feito": 0, "total": total}, mensagem="carregando modelo")
-    if any(it.get("modelo") != "klein" for it in itens):
-        carregar()
-    if any(it.get("modelo") == "klein" for it in itens):
-        carregar_klein()
+    # primeiro todas do Z-Image, depois as com foto de referência: o modelo troca de lugar uma vez só por job
+    itens = [it for it in itens if it.get("modelo") != "klein"] + [it for it in itens if it.get("modelo") == "klein"]
     pasta_refs = d / "input" / "refs"
     store.update_status(jid, mensagem="gerando")
 
@@ -161,7 +192,19 @@ def processar(st: dict) -> None:
         store.heartbeat(TIPO, "ocupado", job=jid, item=i + 1, total=total)
         try:
             t = time.time()
-            img = gerar(it, pasta_refs)
+            try:
+                img = gerar(it, pasta_refs)
+            except Exception as e1:  # falta de memória: limpa e tenta a mesma imagem mais uma vez
+                if MOCK or "out of memory" not in str(e1).lower():
+                    raise
+                import gc
+
+                import torch
+
+                gc.collect()
+                torch.cuda.empty_cache()
+                log(f"{it['nome']}: sem memória na GPU — limpando e tentando de novo")
+                img = gerar(it, pasta_refs)
             nome = f"{it['nome']}.{formato}"
             salvar(img, d / "output" / nome, formato)
             arquivos.append(nome)
@@ -191,6 +234,7 @@ def main() -> None:
     if PRELOAD:
         try:
             carregar()
+            usar("z")
         except Exception:
             traceback.print_exc()
             log("falha ao pré-carregar; vou tentar de novo no primeiro job")

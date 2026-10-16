@@ -230,7 +230,7 @@ curl -F 'pedido={"prompts":[{"prompt":"the man from image 1, now about 60 years 
      -F arquivos=@I3.jpg http://localhost:8000/imagens/referencias
 ```
 
-O klein carrega na 1ª imagem com referência (leva 1–3 min na 1ª vez: baixa ~16 GB pro volume). Pra já deixar pronto
+Os dois modelos não ficam juntos na GPU: um espera na RAM e troca de lugar quando o job precisa (cada job faz primeiro as do Z-Image, depois as com referência). O klein carrega na 1ª imagem com referência (leva 1–3 min na 1ª vez: baixa ~16 GB pro volume). Pra já deixar pronto
 no início: `PRELOAD_KLEIN=1 bash start.sh`. Numa A40 (48 GB) cabem Z-Image + klein + Chatterbox juntos; em placa
 menor o klein liga o offload sozinho (mais lento). **Depois de atualizar o código, rode `bash setup.sh` de novo**
 (o diffusers precisa ser ≥ 0.41).
