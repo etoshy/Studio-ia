@@ -218,6 +218,23 @@ Exemplos prontos em `exemplos/`.
 
 ---
 
+### Imagens com fotos de referência (rosto, objeto) — FLUX.2 [klein] 4B
+
+`POST /imagens/referencias` (multipart): campo `pedido` = o mesmo JSON do `/imagens`, e `arquivos` = as fotos.
+Cada item pode ter `"referencias": ["I3.jpg", "I7.jpg"]` (até 4, pelo nome do arquivo enviado). Esses itens usam o
+**FLUX.2 [klein] 4B** (Apache 2.0, uso comercial liberado, ~13 GB de VRAM, 4 passos); no prompt, chame de
+"the person in image 1", "image 2"… Itens sem `referencias` continuam no Z-Image Turbo.
+
+```bash
+curl -F 'pedido={"prompts":[{"prompt":"the man from image 1, now about 60 years old, sitting in a 1990 courtroom","nome":"cena-0001","referencias":["I3.jpg"]}]}' \
+     -F arquivos=@I3.jpg http://localhost:8000/imagens/referencias
+```
+
+O klein carrega na 1ª imagem com referência (leva 1–3 min na 1ª vez: baixa ~16 GB pro volume). Pra já deixar pronto
+no início: `PRELOAD_KLEIN=1 bash start.sh`. Numa A40 (48 GB) cabem Z-Image + klein + Chatterbox juntos; em placa
+menor o klein liga o offload sozinho (mais lento). **Depois de atualizar o código, rode `bash setup.sh` de novo**
+(o diffusers precisa ser ≥ 0.41).
+
 ## Testar no PC sem GPU (modo simulado)
 
 O modo simulado gera imagens coloridas e um "bip" no lugar da voz. Serve para testar o fluxo e o cliente sem gastar nada.

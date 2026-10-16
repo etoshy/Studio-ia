@@ -1,6 +1,6 @@
 # Ambiente da API + worker de imagens (Z-Image Turbo)
 torch
-diffusers>=0.36.0
+diffusers>=0.41.0  # ZImagePipeline + Flux2KleinPipeline (fotos de referência)
 transformers>=4.56
 accelerate
 safetensors

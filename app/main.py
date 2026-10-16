@@ -115,6 +115,8 @@ class ItemImagem(BaseModel):
     altura: Optional[int] = None
     passos: Optional[int] = Field(None, ge=1, le=50)
     quantidade: Optional[int] = Field(None, ge=1, le=16)
+    referencias: Optional[List[str]] = Field(None, description="nomes das fotos de referência enviadas junto "
+                                             "(só em /imagens/referencias) — usa o FLUX.2 klein 4B (rosto/objeto da foto)")
 
 
 class PedidoImagens(BaseModel):
@@ -145,7 +147,13 @@ class PedidoImagens(BaseModel):
     }
 
 
-def _criar_job_imagens(p: PedidoImagens) -> dict:
+KLEIN_PASSOS = 4  # FLUX.2 [klein] 4B destilado: 4 passos, guidance 1.0
+MAX_REFS = 4
+
+
+def _criar_job_imagens(p: PedidoImagens, refs: Optional[dict] = None) -> dict:
+    """refs = {nome: bytes} das fotos de referência (só no /imagens/referencias)."""
+    refs = refs or {}
     itens, usados = [], set()
     base_seed = p.seed if p.seed is not None else random.randint(0, 2**31 - 1)
     n = 0
@@ -167,12 +175,24 @@ def _criar_job_imagens(p: PedidoImagens) -> dict:
                 nome += "_b"
             usados.add(nome)
             seed = it.seed + k if it.seed is not None else base_seed + n
-            itens.append({"nome": nome, "prompt": prompt_final, "prompt_original": texto, "seed": seed,
-                          "largura": w, "altura": h, "passos": it.passos or p.passos})
+            item = {"nome": nome, "prompt": prompt_final, "prompt_original": texto, "seed": seed,
+                    "largura": w, "altura": h, "passos": it.passos or p.passos}
+            if it.referencias:
+                faltam = [r for r in it.referencias if r not in refs]
+                if faltam:
+                    raise HTTPException(400, f"referência não enviada: {', '.join(faltam)} (item {nome})")
+                item.update(modelo="klein", referencias=list(dict.fromkeys(it.referencias))[:MAX_REFS],
+                            passos=it.passos or KLEIN_PASSOS)
+            itens.append(item)
             n += 1
     if not itens:
         raise HTTPException(400, "nenhum prompt válido")
     st = store.new_job("imagem", {"formato": p.formato, "itens": itens}, nome=p.nome)
+    if refs:
+        pasta = store.job_dir(st["id"]) / "input" / "refs"
+        pasta.mkdir(parents=True, exist_ok=True)
+        for nome_ref, dados in refs.items():
+            (pasta / nome_ref).write_bytes(dados)
     store.update_status(st["id"], progresso={"feito": 0, "total": len(itens)})
     return store.finalizar_criacao(st["id"])
 
@@ -180,6 +200,31 @@ def _criar_job_imagens(p: PedidoImagens) -> dict:
 @app.post("/imagens", tags=["imagens"], summary="Gerar uma lista de imagens")
 def gerar_imagens(pedido: PedidoImagens):
     return _com_links(_criar_job_imagens(pedido))
+
+
+@app.post("/imagens/referencias", tags=["imagens"],
+          summary="Imagens a partir de FOTOS de referência (rosto, objeto, lugar) — FLUX.2 klein 4B")
+async def gerar_imagens_com_referencias(
+    pedido: str = Form(..., description="o mesmo JSON do /imagens; cada item pode ter \"referencias\": [\"nome.jpg\"]"),
+    arquivos: List[UploadFile] = File(..., description="as fotos de referência (o nome do arquivo é o que vai em \"referencias\")"),
+):
+    """Itens COM `referencias` usam o FLUX.2 klein 4B (mantém o rosto/objeto das fotos; até 4 por imagem; no prompt,
+    chame de "the person in image 1", "image 2"…). Itens sem `referencias` continuam no Z-Image Turbo."""
+    try:
+        p = PedidoImagens(**json.loads(pedido))
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(400, f"pedido inválido: {e}")
+    refs = {}
+    import re as _re
+    for a in arquivos:
+        nome = Path(a.filename or "").name
+        if not _re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,79}", nome):
+            raise HTTPException(400, f"nome de arquivo inválido: {a.filename!r} (use letras, números, . _ -)")
+        dados = await a.read()
+        if len(dados) > 25 * 1024 * 1024:
+            raise HTTPException(400, f"{nome}: maior que 25 MB")
+        refs[nome] = dados
+    return _com_links(_criar_job_imagens(p, refs))
 
 
 @app.post("/imagens/txt", tags=["imagens"],
