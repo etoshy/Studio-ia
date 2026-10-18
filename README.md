@@ -103,6 +103,10 @@ O cliente espera cada job terminar e baixa tudo para `resultados/<id-do-job>/`.
 
 ---
 
+## Novidades do pod 7
+
+- 🧩 O `setup.sh` lê a versão de CUDA do **driver** do pod (`nvidia-smi`) e instala o torch das imagens compatível (cu124 / cu126 / cu128 / cu130). Antes vinha o torch mais novo do PyPI, feito pra CUDA 13, e em pod com driver 12.x o worker de imagens caía com *“The NVIDIA driver on your system is too old”*. Se isso já aconteceu, é só rodar `bash setup.sh` de novo (ele conserta sozinho).
+
 ## Novidades do pod 6
 
 - ⭐ **Clipe principal**: o perfil importado do site traz o `_principal.txt` (o clipe que você marcou com ⭐ no site) e o pod usa ESSE clipe na clonagem (antes usava sempre o `ref_01`). Volta junto no exportar.

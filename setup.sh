@@ -42,8 +42,29 @@ if [ ! -f "$VENVS/img/.ok" ]; then
   criar_venv "$VENVS/img" "$PY_IMG"
   "$VENVS/img/bin/pip" install -q -U pip wheel
 fi
+# torch do tamanho do DRIVER deste pod: o torch mais novo do PyPI é feito pra CUDA 13 e não roda em driver 12.x
+# ("The NVIDIA driver on your system is too old"). Lê a CUDA do driver no nvidia-smi e usa o índice do PyTorch certo.
+TORCH_IDX=""
+if command -v nvidia-smi >/dev/null 2>&1; then
+  CUDA_DRV="$(nvidia-smi | grep -o 'CUDA Version: [0-9.]*' | grep -o '[0-9.]*$' | head -1)"
+  case "$CUDA_DRV" in
+    13.*)        TORCH_IDX="https://download.pytorch.org/whl/cu130" ;;
+    12.9|12.8)   TORCH_IDX="https://download.pytorch.org/whl/cu128" ;;
+    12.7|12.6)   TORCH_IDX="https://download.pytorch.org/whl/cu126" ;;
+    12.*)        TORCH_IDX="https://download.pytorch.org/whl/cu124" ;;
+  esac
+  echo "==> driver com CUDA ${CUDA_DRV:-?} → torch de ${TORCH_IDX:-PyPI}"
+fi
+torch_ok() { "$VENVS/img/bin/python" -c "import torch,sys; sys.exit(0 if torch.cuda.is_available() else 1)" 2>/dev/null; }
+if [ -n "$TORCH_IDX" ] && ! torch_ok; then
+  echo "==> instalando o torch compatível com este driver"
+  "$VENVS/img/bin/pip" install -q --force-reinstall torch --index-url "$TORCH_IDX"
+fi
 echo "==> dependências de imagens + API"
 "$VENVS/img/bin/pip" install -q -r "$ROOT/requirements/img.txt" && touch "$VENVS/img/.ok"
+if [ -n "$TORCH_IDX" ] && ! torch_ok; then
+  echo "   aviso: o torch das imagens ainda não enxerga a GPU — veja: $VENVS/img/bin/python -c 'import torch; torch.cuda.init()'"
+fi
 
 if [ ! -f "$VENVS/tts/.ok" ]; then
   echo "==> criando o ambiente de voz ($($PY_TTS --version))"
