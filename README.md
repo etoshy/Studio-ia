@@ -103,6 +103,13 @@ O cliente espera cada job terminar e baixa tudo para `resultados/<id-do-job>/`.
 
 ---
 
+## Novidades do pod 6
+
+- ⭐ **Clipe principal**: o perfil importado do site traz o `_principal.txt` (o clipe que você marcou com ⭐ no site) e o pod usa ESSE clipe na clonagem (antes usava sempre o `ref_01`). Volta junto no exportar.
+- 🎭 **Várias vozes num roteiro** pela 🏭 Produção no pod do BestEditor (v84_180+): o site manda os perfis e um texto com `{{perfil=…, emocao=…, cfg=…}}` antes de cada fala — nada a configurar aqui.
+
+---
+
 ## API
 
 ### Imagens

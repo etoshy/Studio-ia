@@ -71,8 +71,23 @@ def existe(nome: str) -> bool:
         return False
 
 
+ARQ_PRINCIPAL = "_principal.txt"  # ⭐ o clipe principal (o único que o Chatterbox usa) — igual ao site (v84_174)
+
+
+def _principal(pasta: Path) -> str:
+    try:
+        nome = (pasta / ARQ_PRINCIPAL).read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+    return nome if nome and (pasta / nome).is_file() else ""
+
+
 def clipes(nome: str) -> list[Path]:
-    arquivos = sorted(_pasta(nome).glob("*.wav"))
+    pasta = _pasta(nome)
+    arquivos = sorted(pasta.glob("*.wav"))
+    pr = _principal(pasta)
+    if pr:
+        arquivos.sort(key=lambda a: a.name != pr)  # o ⭐ vem primeiro
     if not arquivos:
         raise PerfilErro(f"perfil de voz '{nome}' não existe no pod. Perfis: {', '.join(p['nome'] for p in listar()) or '(nenhum)'}")
     return arquivos
@@ -214,6 +229,10 @@ def _importar_manifesto(z, membros, manifesto, substituir, renomear, existentes)
         n = 0
         for seg, rel in arquivos:
             partes = rel.split("/")
+            if rel == ARQ_PRINCIPAL:  # ⭐ o principal escolhido no site
+                with z.open(seg) as src, open(pasta / ARQ_PRINCIPAL, "wb") as dst:
+                    shutil.copyfileobj(src, dst)
+                continue
             if not rel.lower().endswith(".wav") or len(partes) > 2 or (len(partes) == 2 and partes[0] != PASTA_ORIGINAL):
                 continue
             alvo = pasta.joinpath(*partes)
@@ -291,6 +310,8 @@ def exportar(nomes: list[str] | None = None) -> bytes:
                 if o.is_file():
                     z.write(o, f"perfis/{nome}/{PASTA_ORIGINAL}/{c.name}")
                     arquivos.append(f"{PASTA_ORIGINAL}/{c.name}")
+            if (pasta / ARQ_PRINCIPAL).is_file():
+                z.write(pasta / ARQ_PRINCIPAL, f"perfis/{nome}/{ARQ_PRINCIPAL}")
             manifesto["perfis"].append({"nome": nome, "info": info, "arquivos": arquivos, "vozes_slug": vozes})
         z.writestr("manifesto.json", json.dumps(manifesto, ensure_ascii=False, indent=1))
         z.writestr("LEIA-ME.txt", "Perfis de voz exportados do pod (Studio IA).\n"
