@@ -103,6 +103,11 @@ O cliente espera cada job terminar e baixa tudo para `resultados/<id-do-job>/`.
 
 ---
 
+## Novidades do pod 8
+
+- 🔁 **Worker que cai volta sozinho**: os workers de imagem e de voz rodam num laço. Se o processo morrer (falta de memória, erro de CUDA, o sistema matou), ele sobe de novo em 5 s e o job que estava no meio volta pra fila. Antes a fila ficava parada em "1º na fila" até alguém rodar o `start.sh` de novo.
+- 🔗 Do lado do BestEditor (v84_181): se a VPS morrer, ligue outra, cole o link novo no lote da 🏭 Produção no pod e clique em 🔁 Tentar de novo. Quem não tinha a narração pede de novo; quem já tinha manda pro pod novo só as imagens que faltam no PC.
+
 ## Novidades do pod 7
 
 - 🧩 O `setup.sh` lê a versão de CUDA do **driver** do pod (`nvidia-smi`) e instala o torch das imagens compatível (cu124 / cu126 / cu128 / cu130). Antes vinha o torch mais novo do PyPI, feito pra CUDA 13, e em pod com driver 12.x o worker de imagens caía com *“The NVIDIA driver on your system is too old”*. Se isso já aconteceu, é só rodar `bash setup.sh` de novo (ele conserta sozinho).

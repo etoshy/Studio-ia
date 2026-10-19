@@ -24,14 +24,21 @@ done
 bash "$ROOT/stop.sh" >/dev/null 2>&1 || true
 sleep 1
 
+# 🔁 pod 8: cada worker roda num laço — se o processo cair (falta de memória, erro de CUDA, kill do sistema), ele volta
+# sozinho em 5 s e devolve pra fila o job que estava fazendo (antes a fila ficava parada em "1º na fila" pra sempre).
+sempre() {  # sempre <log> <comando...>
+  local log="$1"; shift
+  nohup bash -c 'while true; do "$@"; rc=$?; echo "[$(date "+%F %T")] worker saiu (código $rc) — reiniciando em 5 s"; sleep 5; done' \
+    _ "$@" >> "$log" 2>&1 &
+}
 if [ "${ENABLE_IMG:-1}" = "1" ]; then
-  nohup "$VENVS/img/bin/python" "$ROOT/workers/worker_images.py" >> "$LOGS/imagens.log" 2>&1 &
+  sempre "$LOGS/imagens.log" "$VENVS/img/bin/python" "$ROOT/workers/worker_images.py"
   echo "worker de imagens  pid $!  (log: $LOGS/imagens.log)"
 fi
 if [ "${ENABLE_TTS:-1}" = "1" ]; then
   # TTS_WORKERS=2 -> duas narrações ao mesmo tempo na mesma placa (precisa de ~8 GB de VRAM a mais)
   for n in $(seq 1 "${TTS_WORKERS:-1}"); do
-    WORKER_ID=$n nohup "$VENVS/tts/bin/python" "$ROOT/workers/worker_tts.py" >> "$LOGS/voz-$n.log" 2>&1 &
+    WORKER_ID=$n sempre "$LOGS/voz-$n.log" "$VENVS/tts/bin/python" "$ROOT/workers/worker_tts.py"
     echo "worker de voz $n    pid $!  (log: $LOGS/voz-$n.log)"
   done
 fi
