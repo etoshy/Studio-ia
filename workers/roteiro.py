@@ -9,6 +9,8 @@ Marcações aceitas (valem do ponto onde aparecem em diante):
     {{voz=outra.wav}}         troca a voz clonada (arquivo dentro do zip)
     {{perfil=joao}}           troca para um perfil de voz guardado no pod
     {{silencio=1500}}         insere um silêncio uma única vez (ms)
+    {{quem=mira}}             quem está falando (personagem/voz do canal) — vai pro <nome>.falas.json: o editor sabe
+                              exatamente quando cada personagem fala (pra pôr ela por cima do vídeo)
 Pode juntar várias: {{emocao=0.9, cfg=0.3}}
 """
 import re
@@ -23,6 +25,7 @@ ALIASES = {
     "pausa_paragrafo": "pausa_paragrafo_ms", "pausa_paragrafo_ms": "pausa_paragrafo_ms",
     "voz": "voz", "perfil": "perfil",
     "silencio": "silencio", "silêncio": "silencio",
+    "quem": "quem", "personagem": "quem", "fala": "quem",
 }
 NUMERICOS = {"exaggeration", "cfg_weight", "temperature", "pausa_ms", "pausa_paragrafo_ms", "silencio"}
 

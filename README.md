@@ -115,7 +115,7 @@ O cliente espera cada job terminar e baixa tudo para `resultados/<id-do-job>/`.
 ## Novidades do pod 6
 
 - ⭐ **Clipe principal**: o perfil importado do site traz o `_principal.txt` (o clipe que você marcou com ⭐ no site) e o pod usa ESSE clipe na clonagem (antes usava sempre o `ref_01`). Volta junto no exportar.
-- 🎭 **Várias vozes num roteiro** pela 🏭 Produção no pod do BestEditor (v84_180+): o site manda os perfis e um texto com `{{perfil=…, emocao=…, cfg=…}}` antes de cada fala — nada a configurar aqui.
+- 🎭 **Várias vozes num roteiro** pela 🏭 Produção no pod do BestEditor (v84_180+): o site manda os perfis e um texto com `{{perfil=…, emocao=…, cfg=…}}` antes de cada fala — nada a configurar aqui. Com `{{quem=…}}` (v84_187) o pod devolve também o `<nome>.falas.json` (quem falou de que segundo a que segundo): o editor põe a personagem do canal por cima do vídeo nos momentos certos.
 
 ---
 
@@ -190,6 +190,7 @@ Marcações no roteiro (valem dali em diante):
 | `{{silencio=1500}}` | insere um silêncio uma única vez (ms) |
 | `{{voz=outra.wav}}` | troca para outro áudio do zip |
 | `{{perfil=maria}}` | troca para um perfil do pod (dá para fazer diálogos) |
+| `{{quem=mira}}` | quem está falando (personagem do canal) — sai no `<nome>.falas.json` com o tempo exato de cada fala |
 
 Dá para juntar várias numa marcação só: `{{emocao=0.9, cfg=0.3}}`.
 

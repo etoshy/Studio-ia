@@ -372,7 +372,7 @@ def processar(st: dict) -> None:
     usar_nome = cfg.get("nome") and len(planos) == 1
     for r, eventos in planos:
         nome_base = store.slug(str(cfg["nome"]), 60) if usar_nome else store.slug(r.stem, 60)
-        pedacos, legendas = [], []
+        pedacos, legendas, quem_de = [], [], []  # quem_de[i] = quem falou a legenda i ({{quem=…}} no roteiro)
         cursor = 0.0
         voz_atual = object()
         trechos_dir = saida / f"{nome_base}_trechos"
@@ -399,6 +399,7 @@ def processar(st: dict) -> None:
             if audio.size:
                 dur = audio.size / SR
                 legendas.append((cursor, cursor + dur, ev["texto"]))
+                quem_de.append((c.get("quem"), str(c.get("voz") or "")))
                 pedacos.append(audio)
                 cursor += dur
                 if cfg.get("salvar_trechos"):
@@ -434,6 +435,16 @@ def processar(st: dict) -> None:
             except Exception as e:
                 traceback.print_exc()
                 erros.append({"roteiro": r.name, "trecho": "(transcrição)", "erro": f"Whisper: {str(e)[:300]}"})
+        if any(q for q, _v in quem_de):  # 🎭 quem fala quando (exato: o tempo de cada trecho narrado)
+            falas = []
+            for (a, b, t), (q, v) in zip(legendas, quem_de):
+                if falas and falas[-1]["quem"] == q and falas[-1]["voz"] == v and a - falas[-1]["fim"] < 1.5:
+                    falas[-1]["fim"] = round(b, 3)
+                    falas[-1]["texto"] += " " + t
+                else:
+                    falas.append({"quem": q, "voz": v, "inicio": round(a, 3), "fim": round(b, 3), "texto": t})
+            store.write_json(saida / f"{nome_base}.falas.json", falas)
+            arquivos.append(f"{nome_base}.falas.json")
         if cfg.get("legenda_srt") and legendas:
             srt = "\n".join(f"{i}\n{tempo_srt(a)} --> {tempo_srt(b)}\n{t}\n"
                             for i, (a, b, t) in enumerate(legendas, 1))
