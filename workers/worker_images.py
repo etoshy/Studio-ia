@@ -29,13 +29,38 @@ def log(msg: str) -> None:
 
 # Os dois modelos NÃO cabem juntos na placa ao lado da voz (Z-Image ~21 GB + klein ~17 GB + Chatterbox ~9 GB > 48 GB):
 # só UM fica na GPU; o outro espera na memória RAM e troca de lugar quando o job precisa dele (alguns segundos).
-# Placa pequena (< 30 GB): os dois usam o offload do diffusers (mais lento, mas cabe).
+# Placa até 40 GB (24 GB das 3090/4090, 32 GB da 5090): os dois usam o offload do diffusers (mais lento, mas cabe ao lado
+# da voz — Z-Image ~20 GB + Chatterbox/Whisper ~11 GB passa de 32 GB). E se mesmo assim faltar memória, vira offload na hora.
 _ONDE = {"z": None, "k": None}  # "gpu" | "cpu" | "offload"
 
 
 def _offload_auto() -> bool:
     import torch
-    return OFFLOAD == "1" or (OFFLOAD == "auto" and torch.cuda.get_device_properties(0).total_memory / 1e9 < 30)
+    return OFFLOAD == "1" or (OFFLOAD == "auto" and torch.cuda.get_device_properties(0).total_memory / 1e9 < 40)
+
+
+def _virar_offload() -> bool:
+    """Faltou memória com o modelo inteiro na GPU (a voz também está usando a placa): passa os dois pro offload do
+    diffusers (só a parte que está trabalhando fica na GPU). → True se mudou algo."""
+    import gc
+
+    import torch
+    mudou = False
+    for chave, p in (("z", pipe), ("k", pipe_klein)):
+        if p is None or _ONDE.get(chave) == "offload":
+            continue
+        try:
+            p.to("cpu")
+            p.enable_model_cpu_offload()
+            _ONDE[chave] = "offload"
+            mudou = True
+        except Exception as e:  # noqa: BLE001
+            log(f"não consegui pôr o {'klein' if chave == 'k' else 'Z-Image'} em offload: {e}")
+    gc.collect()
+    torch.cuda.empty_cache()
+    if mudou:
+        log("pouca memória na GPU (a voz também usa a placa): imagens em offload daqui pra frente (mais lento, mas cabe)")
+    return mudou
 
 
 def _preparar(p, chave: str) -> None:
@@ -203,7 +228,11 @@ def processar(st: dict) -> None:
 
                 gc.collect()
                 torch.cuda.empty_cache()
-                log(f"{it['nome']}: sem memória na GPU — limpando e tentando de novo")
+                if _virar_offload():
+                    log(f"{it['nome']}: sem memória na GPU — tentando de novo em offload")
+                else:
+                    log(f"{it['nome']}: sem memória na GPU — limpando e tentando de novo")
+                    time.sleep(5)  # a voz pode estar no meio de um trecho: dá um respiro
                 img = gerar(it, pasta_refs)
             nome = f"{it['nome']}.{formato}"
             salvar(img, d / "output" / nome, formato)

@@ -268,7 +268,7 @@ python -m uvicorn app.main:app --port 8000
 
 ## Problemas comuns
 
-- **`/status` mostra um worker `offline`**: veja `/workspace/studio_logs/imagens.log` ou `voz.log`. O erro mais comum é falta de VRAM numa placa de 24 GB; use `IMG_CPU_OFFLOAD=1`.
+- **`/status` mostra um worker `offline`**: veja `/workspace/studio_logs/imagens.log` ou `voz.log`. O erro mais comum é falta de VRAM numa placa de 24 GB; use `IMG_CPU_OFFLOAD=1`. Desde o pod 10 o offload já liga sozinho em placas de até 40 GB (3090/4090/5090) e, se mesmo assim faltar memória (a voz usa ~11 GB da mesma placa), o worker passa pro offload na hora e refaz a imagem.
 - **Sotaque estranho no pt-BR**: suba com `TTS_PACOTE_S3GEN=base`. Isso usa o decoder padrão no lugar do que vem no pacote.
 - **Áudio de referência**: 10 a 20 s, uma pessoa só, sem música. Só os primeiros ~10 s entram na clonagem.
 - **Texto muito curto** (uma palavra) às vezes falha no Chatterbox. O servidor junta frases curtas automaticamente.
