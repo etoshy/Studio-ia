@@ -605,10 +605,20 @@ def _gpu() -> list[dict]:
         ).stdout.strip()
     except Exception:
         return []
+    def _num(x: str):
+        # algumas placas/pods (MIG, Server Edition) respondem "[Insufficient Permissions]" ou "[N/A]" em vez do número
+        try:
+            return int(float(x))
+        except (TypeError, ValueError):
+            return None
+
     gpus = []
     for linha in out.splitlines():
-        nome, usado, total, util = [x.strip() for x in linha.split(",")]
-        gpus.append({"nome": nome, "vram_usada_mb": int(usado), "vram_total_mb": int(total), "uso_pct": int(util)})
+        partes = [x.strip() for x in linha.split(",")]
+        if len(partes) < 4:
+            continue
+        nome, usado, total, util = partes[:4]
+        gpus.append({"nome": nome, "vram_usada_mb": _num(usado), "vram_total_mb": _num(total), "uso_pct": _num(util)})
     return gpus
 
 

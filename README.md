@@ -29,7 +29,10 @@ cliente/studio.py         cliente de linha de comando pro seu PC
 1. **GPU**:
    - **L40S 48 GB** é a recomendada: Z-Image e Chatterbox cabem juntos na placa.
    - **RTX 4090 24 GB** também funciona. Nela o Z-Image liga sozinho o *CPU offload*, então fica um pouco mais lento.
-   - ⚠️ **Evite RTX 5090 e placas Blackwell**: o Chatterbox usa torch 2.6, que não roda nelas.
+   - Placas **Blackwell** (RTX 5090/5080, RTX PRO 6000, B200/B300) também servem: o Chatterbox fixa o torch 2.6, que
+     não roda nelas, então o `setup.sh` percebe a placa e troca **só o torch do ambiente de voz** por um novo (cu128) —
+     e não volta pro 2.6 quando você roda o setup de novo. As outras placas (3090, 4090, A40, A6000, L40S, A100, H100)
+     continuam exatamente como antes.
 2. **Template**: *RunPod PyTorch* (Ubuntu + Python 3.11).
 3. **Network Volume** de ~60 GB montado em `/workspace`. É onde ficam os modelos e os ambientes, para não baixar tudo de novo a cada sessão.
 4. **Expose HTTP Ports**: `8000`.

@@ -66,23 +66,54 @@ if [ -n "$TORCH_IDX" ] && ! torch_ok; then
   echo "   aviso: o torch das imagens ainda não enxerga a GPU — veja: $VENVS/img/bin/python -c 'import torch; torch.cuda.init()'"
 fi
 
+# 🎮 a placa: as Blackwell (RTX 5090/5080, RTX PRO 6000, B200/B300) precisam de um torch novo no ambiente de voz
+GPU=""
+BLACKWELL=0
+if command -v nvidia-smi >/dev/null 2>&1; then
+  GPU="$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1)"
+  echo "==> GPU: ${GPU:-?}"
+  case "$GPU" in
+    *5090*|*5080*|*5070*|*5060*|*Blackwell*|*B200*|*B300*|*GB200*|*"PRO 6000"*|*"Pro 6000"*) BLACKWELL=1 ;;
+  esac
+fi
+
 if [ ! -f "$VENVS/tts/.ok" ]; then
   echo "==> criando o ambiente de voz ($($PY_TTS --version))"
   rm -rf "$VENVS/tts"
   criar_venv "$VENVS/tts" "$PY_TTS"
   "$VENVS/tts/bin/pip" install -q -U pip wheel
 fi
-echo "==> dependências de voz (Chatterbox + Whisper)"
-"$VENVS/tts/bin/pip" install -q -r "$ROOT/requirements/tts.txt" && touch "$VENVS/tts/.ok"
+if [ "$BLACKWELL" = 1 ] && [ -f "$VENVS/tts/.ok" ] && [ -f "$VENVS/tts/.torch_blackwell" ]; then
+  # o Chatterbox pede torch==2.6: rodar o requirements de novo voltaria o torch velho (e a voz quebraria nesta placa)
+  echo "==> dependências de voz: já instaladas (com o torch novo desta placa — pra reinstalar: bash setup.sh --refazer)"
+else
+  echo "==> dependências de voz (Chatterbox + Whisper)"
+  rm -f "$VENVS/tts/.torch_blackwell"
+  "$VENVS/tts/bin/pip" install -q -r "$ROOT/requirements/tts.txt" && touch "$VENVS/tts/.ok"
+fi
 
-if command -v nvidia-smi >/dev/null 2>&1; then
-  GPU="$(nvidia-smi --query-gpu=name --format=csv,noheader | head -1)"
-  echo "==> GPU: $GPU"
-  case "$GPU" in
-    *5090*|*5080*|*Blackwell*|*B200*|*"PRO 6000"*|*"Pro 6000"*)
-      echo "   aviso: o Chatterbox usa torch 2.6, que não roda em placas Blackwell."
-      echo "   Prefira RTX 4090, L40S, A6000, A100 ou H100." ;;
-  esac
+voz_roda() {  # a voz usa LSTM: testa um de verdade na GPU (o torch 2.6 sem kernel da placa falha aqui)
+  "$VENVS/tts/bin/python" -c "import torch; torch.nn.LSTM(4,4).cuda()(torch.zeros(1,1,4,device='cuda')); print('ok')" >/dev/null 2>&1
+}
+if [ "$BLACKWELL" = 1 ]; then
+  if voz_roda; then
+    echo "   voz: ok nesta placa"
+    touch "$VENVS/tts/.torch_blackwell"
+  else
+    # o torch 2.6 do Chatterbox não tem os kernels da Blackwell ("no kernel image is available"): troca SÓ o torch do
+    # ambiente de voz por um novo (o Chatterbox roda com ele). As outras placas continuam com o 2.6, como sempre.
+    IDX_TTS="https://download.pytorch.org/whl/cu128"  # testado na RTX 5090 (torch 2.11 + torchaudio, Chatterbox narrando)
+    echo "==> placa Blackwell: torch novo no ambiente de voz ($IDX_TTS)"
+    "$VENVS/tts/bin/pip" install -q --upgrade torch torchaudio --index-url "$IDX_TTS" 2>&1 | grep -v "requires torch\|dependency resolver\|dependency conflicts" || true
+    if voz_roda; then
+      echo "   voz: ok nesta placa"
+      touch "$VENVS/tts/.torch_blackwell"
+    else
+      echo "   aviso: a voz ainda não roda nesta placa — prefira RTX 3090/4090, L40S, A6000, A40, A100 ou H100."
+    fi
+  fi
+elif [ -n "$GPU" ] && ! voz_roda; then
+  echo "   aviso: o ambiente de voz não conseguiu usar a GPU — veja: $VENVS/tts/bin/python -c 'import torch; print(torch.cuda.is_available())'"
 fi
 
 echo
